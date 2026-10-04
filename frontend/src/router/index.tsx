@@ -5,6 +5,8 @@ import HoleBoard from '../pages/HoleBoard';
 import HoleList from '../pages/HoleList';
 import RunLog from '../pages/RunLog';
 import CoreBoxList from '../pages/CoreBoxList';
+import IntakeDesk from '../pages/IntakeDesk';
+import LocationBoard from '../pages/LocationBoard';
 import LithoEditor from '../pages/LithoEditor';
 
 function NotFound() {
@@ -22,7 +24,7 @@ function NotFound() {
   );
 }
 
-/** 全部路由：工作台 + 钻孔台帐 / 回次记录 / 岩芯箱 / 岩性编录 */
+/** 全部路由：工作台 + 钻孔台帐 / 回次记录 / 岩芯箱 / 入库管理 / 库位管理 / 岩性编录 */
 export const routes: RouteObject[] = [
   {
     path: '/',
@@ -32,6 +34,8 @@ export const routes: RouteObject[] = [
       { path: 'holes', element: <HoleList /> },
       { path: 'runs', element: <RunLog /> },
       { path: 'boxes', element: <CoreBoxList /> },
+      { path: 'intake', element: <IntakeDesk /> },
+      { path: 'locations', element: <LocationBoard /> },
       { path: 'lithology', element: <LithoEditor /> },
       { path: '*', element: <NotFound /> },
     ],

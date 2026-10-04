@@ -1,3 +1,5 @@
+import type { BoxStorageStatus } from './intake';
+
 /** 岩芯箱 */
 export interface CoreBox {
   id: string;
@@ -15,12 +17,22 @@ export interface CoreBox {
   slotLength: number;
   /** 装箱日期 ISO */
   boxedAt: string;
-  /** 库架位 */
+  /** 库架位（钻机组装箱时选定的期望架位） */
   shelfPos: string;
   /** 破损格（格序号，从 1 开始） */
   damagedSlots: number[];
   /** 装箱人 */
   operator: string;
+  /** 入库状态：待入库 / 待确认 / 排队等腾位 / 已上架 */
+  storageStatus?: BoxStorageStatus;
+  /** 挂起（排队等腾位）原因 */
+  waitReason?: string;
+  /** 所属入库申请 */
+  applicationId?: string;
+  /** 上架库位 */
+  locationId?: string;
+  /** 所属入库单 */
+  receiptId?: string;
   /** 备注 */
   remark?: string;
 }

@@ -8,6 +8,7 @@ import FilterBar from '../components/common/FilterBar';
 import { useHoleFilter } from '../hooks/useHoleFilter';
 import { useHoleStore, holeProgressList } from '../stores/holeStore';
 import { useRunStore, anomalyList } from '../stores/runStore';
+import { useBoxStore } from '../stores/boxStore';
 import { RIG_NOS, SHIFTS, type HoleProgress } from '../types/drill-hole';
 import type { RunAnomaly } from '../types/drill-run';
 import { isAnomaly } from '../utils/recovery';
@@ -18,6 +19,7 @@ const { Title, Paragraph, Text } = Typography;
 export default function HoleBoard() {
   const holes = useHoleStore((s) => s.holes);
   const runs = useRunStore((s) => s.runs);
+  const boxes = useBoxStore((s) => s.boxes);
   const filter = useHoleFilter();
 
   const visibleHoles = useMemo(() => filter.apply(holes), [holes, filter]);
@@ -135,6 +137,25 @@ export default function HoleBoard() {
                 </Tag>
               ))}
             </Space>
+          }
+        />
+      ) : null}
+
+      {boxes.some((b) => b.storageStatus === 'waiting') ? (
+        <Alert
+          style={{ marginBottom: 16 }}
+          type="warning"
+          showIcon
+          message={
+            <span>
+              岩芯箱入库：已上架 <Text strong>{boxes.filter((b) => b.storageStatus === 'stored').length}</Text> 箱，
+              <Text strong type="warning">
+                {' '}
+                {boxes.filter((b) => b.storageStatus === 'waiting').length}{' '}
+              </Text>
+              箱因库位到顶/管段不符排队等腾位，
+              <Link to="/intake"> 前往入库管理处理 </Link>
+            </span>
           }
         />
       ) : null}

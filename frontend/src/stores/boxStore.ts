@@ -17,6 +17,9 @@ export interface BoxInput {
   remark?: string;
 }
 
+/** 钻探班组只能改/删未入库（待入库）的箱子 */
+export class BoxLockedError extends Error {}
+
 interface BoxState {
   boxes: CoreBox[];
   hydrated: boolean;
@@ -24,8 +27,15 @@ interface BoxState {
   addBox: (input: BoxInput) => Promise<CoreBox>;
   updateBox: (id: string, patch: Partial<BoxInput>) => Promise<void>;
   removeBox: (id: string) => Promise<void>;
-  /** 标记/取消破损格 */
+  /** 标记/取消破损格（仅待入库箱可改） */
   toggleDamagedSlot: (id: string, slot: number) => Promise<void>;
+}
+
+function assertEditable(box: CoreBox | undefined): asserts box is CoreBox {
+  if (!box) return;
+  if ((box.storageStatus ?? 'pending') !== 'pending') {
+    throw new BoxLockedError(`箱子 ${box.boxNo} 已提交入库申请，钻探班组不能修改；如需下架请由库房管理员退回`);
+  }
 }
 
 /** 岩芯箱与格位分配 */
@@ -52,6 +62,7 @@ export const useBoxStore = create<BoxState>()((set, get) => ({
       damagedSlots: input.damagedSlots ?? [],
       operator: input.operator.trim(),
       remark: input.remark?.trim() || undefined,
+      storageStatus: 'pending',
     };
     await db.boxes.put(box);
     set({ boxes: [...get().boxes, box] });
@@ -61,12 +72,16 @@ export const useBoxStore = create<BoxState>()((set, get) => ({
   updateBox: async (id, patch) => {
     const current = get().boxes.find((b) => b.id === id);
     if (!current) return;
+    assertEditable(current);
     const next: CoreBox = { ...current, ...patch };
     await db.boxes.put(next);
     set({ boxes: get().boxes.map((b) => (b.id === id ? next : b)) });
   },
 
   removeBox: async (id) => {
+    const current = get().boxes.find((b) => b.id === id);
+    if (!current) return;
+    assertEditable(current);
     await db.boxes.delete(id);
     set({ boxes: get().boxes.filter((b) => b.id !== id) });
   },
@@ -74,6 +89,7 @@ export const useBoxStore = create<BoxState>()((set, get) => ({
   toggleDamagedSlot: async (id, slot) => {
     const current = get().boxes.find((b) => b.id === id);
     if (!current) return;
+    assertEditable(current);
     const damagedSlots = current.damagedSlots.includes(slot)
       ? current.damagedSlots.filter((s) => s !== slot)
       : [...current.damagedSlots, slot].sort((a, b) => a - b);

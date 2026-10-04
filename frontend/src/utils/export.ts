@@ -8,15 +8,21 @@ export interface BackupPayload {
   runs: unknown[];
   boxes: unknown[];
   lithos: unknown[];
+  locations: unknown[];
+  applications: unknown[];
+  receipts: unknown[];
 }
 
 /** 汇总全部本地表为 JSON 备份（schema 迁移前先导出） */
 export async function buildBackup(): Promise<BackupPayload> {
-  const [holes, runs, boxes, lithos] = await Promise.all([
+  const [holes, runs, boxes, lithos, locations, applications, receipts] = await Promise.all([
     db.holes.toArray(),
     db.runs.toArray(),
     db.boxes.toArray(),
     db.lithos.toArray(),
+    db.locations.toArray(),
+    db.applications.toArray(),
+    db.receipts.toArray(),
   ]);
   return {
     app: 'gbdrillcore',
@@ -26,6 +32,9 @@ export async function buildBackup(): Promise<BackupPayload> {
     runs,
     boxes,
     lithos,
+    locations,
+    applications,
+    receipts,
   };
 }
 
@@ -55,11 +64,11 @@ export function downloadCsv<T extends Record<string, unknown>>(
   const body = rows
     .map((row) => columns.map((c) => `"${String(row[c.key] ?? '').replace(/"/g, '""')}"`).join(','))
     .join('\n');
-  downloadText(filename, `\ufeff${header}\n${body}`, 'text/csv');
+  downloadText(filename, `﻿${header}\n${body}`, 'text/csv');
 }
 
 /** 恢复 JSON 备份 */
-export async function importBackup(text: string): Promise<{ holes: number; runs: number; boxes: number; lithos: number }> {
+export async function importBackup(text: string): Promise<{ holes: number; runs: number; boxes: number; lithos: number; locations: number; applications: number; receipts: number }> {
   const payload = JSON.parse(text) as Partial<BackupPayload>;
   if (!payload || payload.app !== 'gbdrillcore') {
     throw new Error('备份文件格式不匹配（缺少 app=gbdrillcore 标记）');
@@ -69,13 +78,19 @@ export async function importBackup(text: string): Promise<{ holes: number; runs:
     runs: payload.runs?.length ?? 0,
     boxes: payload.boxes?.length ?? 0,
     lithos: payload.lithos?.length ?? 0,
+    locations: payload.locations?.length ?? 0,
+    applications: payload.applications?.length ?? 0,
+    receipts: payload.receipts?.length ?? 0,
   };
-  await db.transaction('rw', db.holes, db.runs, db.boxes, db.lithos, async () => {
-    await Promise.all([db.holes.clear(), db.runs.clear(), db.boxes.clear(), db.lithos.clear()]);
+  await db.transaction('rw', [db.holes, db.runs, db.boxes, db.lithos, db.locations, db.applications, db.receipts], async () => {
+    await Promise.all([db.holes.clear(), db.runs.clear(), db.boxes.clear(), db.lithos.clear(), db.locations.clear(), db.applications.clear(), db.receipts.clear()]);
     if (payload.holes?.length) await db.holes.bulkPut(payload.holes as never[]);
     if (payload.runs?.length) await db.runs.bulkPut(payload.runs as never[]);
     if (payload.boxes?.length) await db.boxes.bulkPut(payload.boxes as never[]);
     if (payload.lithos?.length) await db.lithos.bulkPut(payload.lithos as never[]);
+    if (payload.locations?.length) await db.locations.bulkPut(payload.locations as never[]);
+    if (payload.applications?.length) await db.applications.bulkPut(payload.applications as never[]);
+    if (payload.receipts?.length) await db.receipts.bulkPut(payload.receipts as never[]);
   });
   return counts;
 }

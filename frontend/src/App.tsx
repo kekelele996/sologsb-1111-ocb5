@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Layout, Menu, Spin, Typography, App as AntApp, Button, Space } from 'antd';
+import { Layout, Menu, Spin, Typography, App as AntApp, Button, Space, Segmented, Tag } from 'antd';
 import {
   CompassOutlined,
   DatabaseOutlined,
@@ -7,6 +7,10 @@ import {
   ExperimentOutlined,
   ProfileOutlined,
   BarsOutlined,
+  InboxOutlined,
+  AppstoreOutlined,
+  ToolOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { seedIfEmpty } from './utils/seed';
@@ -15,6 +19,9 @@ import { useHoleStore } from './stores/holeStore';
 import { useRunStore } from './stores/runStore';
 import { useBoxStore } from './stores/boxStore';
 import { useLithoStore } from './stores/lithoStore';
+import { useLocationStore } from './stores/locationStore';
+import { useIntakeStore } from './stores/intakeStore';
+import { useRoleStore } from './stores/roleStore';
 
 const { Header, Sider, Content, Footer } = Layout;
 const { Title, Text } = Typography;
@@ -24,6 +31,8 @@ const MENU_ITEMS = [
   { key: '/holes', icon: <DatabaseOutlined />, label: <Link to="/holes">钻孔台帐</Link> },
   { key: '/runs', icon: <BarsOutlined />, label: <Link to="/runs">回次记录</Link> },
   { key: '/boxes', icon: <ProfileOutlined />, label: <Link to="/boxes">岩芯箱</Link> },
+  { key: '/intake', icon: <InboxOutlined />, label: <Link to="/intake">入库管理</Link> },
+  { key: '/locations', icon: <AppstoreOutlined />, label: <Link to="/locations">库位管理</Link> },
   { key: '/lithology', icon: <ExperimentOutlined />, label: <Link to="/lithology">岩性编录</Link> },
 ];
 
@@ -35,14 +44,20 @@ export default function App() {
   const hydrateRuns = useRunStore((s) => s.hydrate);
   const hydrateBoxes = useBoxStore((s) => s.hydrate);
   const hydrateLithos = useLithoStore((s) => s.hydrate);
+  const hydrateLocations = useLocationStore((s) => s.hydrate);
+  const hydrateIntake = useIntakeStore((s) => s.hydrate);
+  const role = useRoleStore((s) => s.role);
+  const hydrateRole = useRoleStore((s) => s.hydrate);
+  const setRole = useRoleStore((s) => s.setRole);
   const location = useLocation();
 
   useEffect(() => {
     let alive = true;
+    hydrateRole();
     (async () => {
       try {
         await seedIfEmpty();
-        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos()]);
+        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos(), hydrateLocations(), hydrateIntake()]);
       } catch (error) {
         message.error(`本地数据装载失败：${(error as Error).message}`);
       } finally {
@@ -52,7 +67,7 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, message]);
+  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, hydrateLocations, hydrateIntake, hydrateRole, message]);
 
   const selectedKey =
     MENU_ITEMS.map((item) => item.key)
@@ -80,6 +95,18 @@ export default function App() {
         <Header style={{ background: '#fff', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text strong>矿区钻孔岩芯编目台</Text>
           <Space>
+            <Tag color={role === 'keeper' ? 'gold' : 'blue'} style={{ marginInlineEnd: 0 }}>
+              {role === 'keeper' ? <ToolOutlined /> : <TeamOutlined />} 当前岗位：{role === 'keeper' ? '库房管理员' : '钻探班组'}
+            </Tag>
+            <Segmented
+              size="small"
+              value={role}
+              onChange={(value) => setRole(value as 'crew' | 'keeper')}
+              options={[
+                { label: '钻探班组', value: 'crew' },
+                { label: '库房管理员', value: 'keeper' },
+              ]}
+            />
             <Button icon={<DownloadOutlined />} onClick={handleExport}>
               导出备份
             </Button>

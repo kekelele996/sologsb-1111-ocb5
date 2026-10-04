@@ -7,6 +7,7 @@ import {
   ExperimentOutlined,
   ProfileOutlined,
   BarsOutlined,
+  ContainerOutlined,
 } from '@ant-design/icons';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { seedIfEmpty } from './utils/seed';
@@ -15,6 +16,8 @@ import { useHoleStore } from './stores/holeStore';
 import { useRunStore } from './stores/runStore';
 import { useBoxStore } from './stores/boxStore';
 import { useLithoStore } from './stores/lithoStore';
+import { useLocationStore } from './stores/locationStore';
+import { useInboundStore } from './stores/inboundStore';
 
 const { Header, Sider, Content, Footer } = Layout;
 const { Title, Text } = Typography;
@@ -24,6 +27,7 @@ const MENU_ITEMS = [
   { key: '/holes', icon: <DatabaseOutlined />, label: <Link to="/holes">钻孔台帐</Link> },
   { key: '/runs', icon: <BarsOutlined />, label: <Link to="/runs">回次记录</Link> },
   { key: '/boxes', icon: <ProfileOutlined />, label: <Link to="/boxes">岩芯箱</Link> },
+  { key: '/warehouse', icon: <ContainerOutlined />, label: <Link to="/warehouse">库房管理</Link> },
   { key: '/lithology', icon: <ExperimentOutlined />, label: <Link to="/lithology">岩性编录</Link> },
 ];
 
@@ -35,6 +39,8 @@ export default function App() {
   const hydrateRuns = useRunStore((s) => s.hydrate);
   const hydrateBoxes = useBoxStore((s) => s.hydrate);
   const hydrateLithos = useLithoStore((s) => s.hydrate);
+  const hydrateLocations = useLocationStore((s) => s.hydrate);
+  const hydrateInbound = useInboundStore((s) => s.hydrate);
   const location = useLocation();
 
   useEffect(() => {
@@ -42,7 +48,7 @@ export default function App() {
     (async () => {
       try {
         await seedIfEmpty();
-        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos()]);
+        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos(), hydrateLocations(), hydrateInbound()]);
       } catch (error) {
         message.error(`本地数据装载失败：${(error as Error).message}`);
       } finally {
@@ -52,7 +58,7 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, message]);
+  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, hydrateLocations, hydrateInbound, message]);
 
   const selectedKey =
     MENU_ITEMS.map((item) => item.key)

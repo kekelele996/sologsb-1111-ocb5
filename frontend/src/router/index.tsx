@@ -6,6 +6,7 @@ import HoleList from '../pages/HoleList';
 import RunLog from '../pages/RunLog';
 import CoreBoxList from '../pages/CoreBoxList';
 import LithoEditor from '../pages/LithoEditor';
+import Warehouse from '../pages/Warehouse';
 
 function NotFound() {
   return (
@@ -32,6 +33,7 @@ export const routes: RouteObject[] = [
       { path: 'holes', element: <HoleList /> },
       { path: 'runs', element: <RunLog /> },
       { path: 'boxes', element: <CoreBoxList /> },
+      { path: 'warehouse', element: <Warehouse /> },
       { path: 'lithology', element: <LithoEditor /> },
       { path: '*', element: <NotFound /> },
     ],

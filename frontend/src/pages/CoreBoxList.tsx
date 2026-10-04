@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, App as AntApp, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Row, Col, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, App as AntApp, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Row, Col, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import type { TableColumnsType } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import BoxGrid from '../components/common/BoxGrid';
@@ -7,11 +7,18 @@ import DepthRangeInput from '../components/common/DepthRangeInput';
 import EmptyPanel from '../components/common/EmptyPanel';
 import { useHoleStore } from '../stores/holeStore';
 import { useRunStore } from '../stores/runStore';
-import { useBoxStore } from '../stores/boxStore';
-import { SHELF_POSITIONS, type CoreBox, type BoxContinuity } from '../types/core-box';
+import { isEditable, useBoxStore } from '../stores/boxStore';
+import { useLocationStore } from '../stores/locationStore';
+import { BOX_STATUS_TEXT, type BoxStatus, type CoreBox, type BoxContinuity } from '../types/core-box';
 import { boxCapacityOk, checkBoxContinuity, validateRange } from '../utils/recovery';
 
 const { Title, Paragraph, Text } = Typography;
+
+const STATUS_COLOR: Record<BoxStatus, string> = {
+  pending: 'default',
+  submitted: 'processing',
+  stored: 'success',
+};
 
 interface BoxFormValues {
   boxNo: string;
@@ -21,7 +28,6 @@ interface BoxFormValues {
   slots: number;
   slotLength: number;
   boxedAt: Dayjs;
-  shelfPos: string;
   operator: string;
   damagedText?: string;
   remark?: string;
@@ -39,7 +45,7 @@ function parseSlots(text: string | undefined): number[] {
   ).sort((a, b) => a - b);
 }
 
-/** 岩芯箱编目与格位分配：校验深度连续性 */
+/** 岩芯箱编目与格位分配：校验深度连续性；未入库箱可改删，上了入库单/已上架箱锁定 */
 export default function CoreBoxList() {
   const { message } = AntApp.useApp();
   const holes = useHoleStore((s) => s.holes);
@@ -51,6 +57,7 @@ export default function CoreBoxList() {
   const updateBox = useBoxStore((s) => s.updateBox);
   const removeBox = useBoxStore((s) => s.removeBox);
   const toggleDamagedSlot = useBoxStore((s) => s.toggleDamagedSlot);
+  const locations = useLocationStore((s) => s.locations);
 
   const [form] = Form.useForm<BoxFormValues>();
   const [open, setOpen] = useState(false);
@@ -66,6 +73,12 @@ export default function CoreBoxList() {
     () => holeBoxes.find((b) => b.id === selectedBoxId) ?? holeBoxes[0],
     [holeBoxes, selectedBoxId],
   );
+
+  const locationName = (id?: string) => {
+    if (!id) return '';
+    const loc = locations.find((l) => l.id === id);
+    return loc ? `${loc.code}（${loc.shelfPos}）` : '库位已删除';
+  };
 
   const continuityOf = (box: CoreBox): BoxContinuity => checkBoxContinuity(box, runs);
 
@@ -84,7 +97,6 @@ export default function CoreBoxList() {
       slots: 10,
       slotLength: 2.5,
       boxedAt: dayjs(),
-      shelfPos: SHELF_POSITIONS[0],
       operator: '高振华',
       damagedText: '',
     } as unknown as BoxFormValues);
@@ -102,7 +114,6 @@ export default function CoreBoxList() {
       slots: record.slots,
       slotLength: record.slotLength,
       boxedAt: dayjs(record.boxedAt),
-      shelfPos: record.shelfPos,
       operator: record.operator,
       damagedText: record.damagedSlots.join(','),
       remark: record.remark,
@@ -125,24 +136,28 @@ export default function CoreBoxList() {
       slots: Number(values.slots) || 0,
       slotLength: Number(values.slotLength) || 0,
       boxedAt: values.boxedAt.toISOString(),
-      shelfPos: values.shelfPos,
       operator: values.operator,
       damagedSlots: parseSlots(values.damagedText).filter((slot) => slot <= (Number(values.slots) || 0)),
       remark: values.remark,
     };
-    const draft: CoreBox = { id: editing?.id ?? 'draft', ...payload };
+    const draft: CoreBox = { id: editing?.id ?? 'draft', shelfPos: '', status: 'pending', locationId: '', ...payload };
     if (!boxCapacityOk(draft)) {
       message.error('格数 × 每格长度小于区间长度，格位容量不足');
       return;
     }
     const continuity = checkBoxContinuity(draft, runs);
-    if (editing) {
-      await updateBox(editing.id, payload);
-      message.success(`已更新箱 ${payload.boxNo}`);
-    } else {
-      const created = await addBox(payload);
-      setSelectedBoxId(created.id);
-      message.success(`已装箱 ${payload.boxNo}`);
+    try {
+      if (editing) {
+        await updateBox(editing.id, payload);
+        message.success(`已更新箱 ${payload.boxNo}`);
+      } else {
+        const created = await addBox(payload);
+        setSelectedBoxId(created.id);
+        message.success(`已装箱 ${payload.boxNo}，请到库房管理提交入库申请`);
+      }
+    } catch (error) {
+      message.error((error as Error).message);
+      return;
     }
     if (!continuity.covered) {
       message.warning(continuity.message);
@@ -150,12 +165,26 @@ export default function CoreBoxList() {
     setOpen(false);
   };
 
+  const handleRemove = async (record: CoreBox) => {
+    try {
+      await removeBox(record.id);
+      message.success('已删除');
+    } catch (error) {
+      message.error((error as Error).message);
+    }
+  };
+
   const columns: TableColumnsType<CoreBox> = [
     { title: '箱号', dataIndex: 'boxNo', width: 130, render: (v: string) => <Text strong>{v}</Text> },
     { title: '深度区间(m)', width: 130, render: (_, row) => `${row.fromDepth}~${row.toDepth}` },
     { title: '格数', dataIndex: 'slots', width: 70, align: 'right' },
     { title: '每格长度(m)', dataIndex: 'slotLength', width: 110, align: 'right' },
-    { title: '库架位', dataIndex: 'shelfPos', width: 110 },
+    {
+      title: '入库状态',
+      width: 120,
+      render: (_, row) => <Tag color={STATUS_COLOR[row.status ?? 'pending']}>{BOX_STATUS_TEXT[row.status ?? 'pending']}</Tag>,
+    },
+    { title: '库位', width: 170, render: (_, row) => (row.locationId ? <Text>{locationName(row.locationId)}</Text> : <Text type="secondary">—</Text>) },
     { title: '装箱日期', dataIndex: 'boxedAt', width: 110, render: (v: string) => dayjs(v).format('YYYY-MM-DD') },
     { title: '装箱人', dataIndex: 'operator', width: 90 },
     {
@@ -165,7 +194,7 @@ export default function CoreBoxList() {
     },
     {
       title: '深度连续性校验',
-      width: 320,
+      width: 300,
       render: (_, row) => {
         const continuity = continuityOf(row);
         return continuity.covered ? (
@@ -177,34 +206,49 @@ export default function CoreBoxList() {
     },
     {
       title: '操作',
-      width: 200,
+      width: 190,
       fixed: 'right',
-      render: (_, record) => (
-        <Space size={2}>
-          <Button size="small" type="link" onClick={() => setSelectedBoxId(record.id)}>
-            查看格位
-          </Button>
-          <Button size="small" type="link" onClick={() => openEdit(record)}>
-            编辑
-          </Button>
-          <Popconfirm title={`确认删除岩芯箱 ${record.boxNo}？`} onConfirm={() => removeBox(record.id).then(() => message.success('已删除'))}>
-            <Button size="small" type="link" danger>
-              删除
+      render: (_, record) => {
+        const editable = isEditable(record);
+        return (
+          <Space size={2}>
+            <Button size="small" type="link" onClick={() => setSelectedBoxId(record.id)}>
+              查看格位
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Tooltip title={editable ? '' : '已提交入库或已上架，需库房管理员退回后才能改'}>
+              <Button size="small" type="link" disabled={!editable} onClick={() => openEdit(record)}>
+                编辑
+              </Button>
+            </Tooltip>
+            <Popconfirm
+              title={`确认删除岩芯箱 ${record.boxNo}？`}
+              disabled={!editable}
+              onConfirm={() => handleRemove(record)}
+            >
+              <Tooltip title={editable ? '' : '已提交入库或已上架，不能删除'}>
+                <Button size="small" type="link" danger disabled={!editable}>
+                  删除
+                </Button>
+              </Tooltip>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
   const formHoleId = Form.useWatch('holeId', form) ?? activeHoleId;
+  const selectedEditable = isEditable(selectedBox);
 
   return (
     <div>
       <Title level={3} style={{ marginBottom: 4 }}>
         岩芯箱编目与格位分配
       </Title>
-      <Paragraph type="secondary">按深度区间分配格位，装箱时校验区间与回次是否连续；断档在格位网格中以虚线标出，破损格可点击切换标记。</Paragraph>
+      <Paragraph type="secondary">
+        按深度区间分配格位，装箱时校验区间与回次是否连续；断档在格位网格中以虚线标出，破损格可点击切换标记。
+        装箱后为「待入库」箱，由钻探班组在「库房管理」提交入库申请；上了入库单的箱子锁定，改删需库房管理员退回。
+      </Paragraph>
 
       <Space style={{ marginBottom: 12 }} wrap>
         <span style={{ color: '#6b7a86' }}>当前钻孔</span>
@@ -221,10 +265,10 @@ export default function CoreBoxList() {
           <Col xs={24}>
             <Card
               size="small"
-              title="格位网格（点击切换破损标记）"
+              title="格位网格（待入库箱可点击切换破损标记）"
               extra={
                 <Select
-                  style={{ width: 170 }}
+                  style={{ width: 220 }}
                   value={selectedBox?.id}
                   onChange={setSelectedBoxId}
                   options={holeBoxes.map((box) => ({ label: `${box.boxNo}（${box.fromDepth}~${box.toDepth}m）`, value: box.id }))}
@@ -233,20 +277,34 @@ export default function CoreBoxList() {
             >
               {selectedBox ? (
                 <>
-                  <BoxGrid box={selectedBox} runs={runs} onToggleDamaged={(slot) => toggleDamagedSlot(selectedBox.id, slot)} />
+                  <BoxGrid
+                    box={selectedBox}
+                    runs={runs}
+                    onToggleDamaged={selectedEditable ? (slot) => toggleDamagedSlot(selectedBox.id, slot) : undefined}
+                  />
                   <Alert
                     style={{ marginTop: 10 }}
                     type={continuityOf(selectedBox).covered ? 'success' : 'warning'}
                     showIcon
                     message={continuityOf(selectedBox).message}
                   />
+                  {!selectedEditable ? (
+                    <Alert
+                      style={{ marginTop: 8 }}
+                      type="info"
+                      showIcon
+                      message={`该箱为「${BOX_STATUS_TEXT[selectedBox.status ?? 'pending']}」状态${
+                        selectedBox.locationId ? `，库位 ${locationName(selectedBox.locationId)}` : ''
+                      }，钻探班组不能改删，需由库房管理员退回。`}
+                    />
+                  ) : null}
                 </>
               ) : null}
             </Card>
           </Col>
           <Col xs={24}>
             <Card size="small" title="岩芯箱台账">
-              <Table rowKey="id" size="small" columns={columns} dataSource={holeBoxes} pagination={{ pageSize: 6 }} scroll={{ x: 1400 }} />
+              <Table rowKey="id" size="small" columns={columns} dataSource={holeBoxes} pagination={{ pageSize: 6 }} scroll={{ x: 1500 }} />
             </Card>
           </Col>
         </Row>
@@ -260,9 +318,6 @@ export default function CoreBoxList() {
             </Form.Item>
             <Form.Item name="holeId" label="钻孔" rules={[{ required: true, message: '请选择钻孔' }]}>
               <Select style={{ width: 200 }} options={holeOptions} />
-            </Form.Item>
-            <Form.Item name="shelfPos" label="库架位" rules={[{ required: true, message: '请选择库架位' }]}>
-              <Select style={{ width: 150 }} options={SHELF_POSITIONS.map((v) => ({ label: v, value: v }))} />
             </Form.Item>
           </Space>
 

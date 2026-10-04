@@ -1,3 +1,6 @@
+/** 岩芯箱入库状态：待入库（钻探班组可改可删）/ 已报待上架 / 已上架（入库单） */
+export type BoxStatus = 'pending' | 'submitted' | 'stored';
+
 /** 岩芯箱 */
 export interface CoreBox {
   id: string;
@@ -15,7 +18,7 @@ export interface CoreBox {
   slotLength: number;
   /** 装箱日期 ISO */
   boxedAt: string;
-  /** 库架位 */
+  /** 库架位（上架后随库位带出；待入库箱可为空串） */
   shelfPos: string;
   /** 破损格（格序号，从 1 开始） */
   damagedSlots: number[];
@@ -23,6 +26,12 @@ export interface CoreBox {
   operator: string;
   /** 备注 */
   remark?: string;
+  /** 入库状态，旧数据升级后回填为 stored */
+  status?: BoxStatus;
+  /** 所在库位 id（已上架） */
+  locationId?: string;
+  /** 最近一次入库申请单 id（提交后挂单，失败退回后保留以便追溯） */
+  inboundOrderId?: string;
 }
 
 /** 岩芯箱与回次的连续性校验结果 */
@@ -37,3 +46,9 @@ export interface BoxContinuity {
 }
 
 export const SHELF_POSITIONS: string[] = ['A 区 1 架', 'A 区 2 架', 'B 区 1 架', 'B 区 2 架', 'C 区 1 架'];
+
+export const BOX_STATUS_TEXT: Record<BoxStatus, string> = {
+  pending: '待入库',
+  submitted: '已报待上架',
+  stored: '已上架',
+};

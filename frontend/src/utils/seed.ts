@@ -3,6 +3,8 @@ import type { DrillHole } from '../types/drill-hole';
 import type { DrillRun } from '../types/drill-run';
 import type { CoreBox } from '../types/core-box';
 import type { LithoLog } from '../types/litho-log';
+import type { StorageLocation } from '../types/storage-location';
+import type { InboundOrder } from '../types/inbound-order';
 import { footageOf, recoveryOf } from './recovery';
 
 const DAY = 86_400_000;
@@ -136,15 +138,138 @@ function buildRuns(): DrillRun[] {
 
 export const SEED_RUNS: DrillRun[] = buildRuns();
 
+/** 示例岩芯箱：含已上架（挂库位）、待入库、已报待上架（排队 / 确认失败退回）几种状态 */
 export const SEED_BOXES: CoreBox[] = [
-  { id: 'box-001', boxNo: 'X-2402-01', holeId: 'hole-002', fromDepth: 0, toDepth: 25, slots: 10, slotLength: 2.5, boxedAt: daysAgo(40), shelfPos: 'A 区 1 架', damagedSlots: [], operator: '高振华' },
-  { id: 'box-002', boxNo: 'X-2402-02', holeId: 'hole-002', fromDepth: 25, toDepth: 50, slots: 10, slotLength: 2.5, boxedAt: daysAgo(39), shelfPos: 'A 区 1 架', damagedSlots: [4], operator: '高振华', remark: '第 4 格岩芯破碎' },
-  { id: 'box-003', boxNo: 'X-2402-03', holeId: 'hole-002', fromDepth: 50, toDepth: 75, slots: 10, slotLength: 2.5, boxedAt: daysAgo(38), shelfPos: 'A 区 2 架', damagedSlots: [], operator: '周明' },
-  { id: 'box-004', boxNo: 'X-2403-01', holeId: 'hole-003', fromDepth: 0, toDepth: 30, slots: 12, slotLength: 2.5, boxedAt: daysAgo(52), shelfPos: 'B 区 1 架', damagedSlots: [], operator: '周明' },
-  { id: 'box-005', boxNo: 'X-2403-02', holeId: 'hole-003', fromDepth: 30, toDepth: 60, slots: 12, slotLength: 2.5, boxedAt: daysAgo(51), shelfPos: 'B 区 1 架', damagedSlots: [7, 8], operator: '周明', remark: '断层破碎带，两格岩芯缺失' },
-  { id: 'box-006', boxNo: 'X-2404-01', holeId: 'hole-004', fromDepth: 0, toDepth: 28, slots: 12, slotLength: 2.5, boxedAt: daysAgo(30), shelfPos: 'B 区 2 架', damagedSlots: [], operator: '赵晓峰' },
-  { id: 'box-007', boxNo: 'X-2401-01', holeId: 'hole-001', fromDepth: 0, toDepth: 26, slots: 11, slotLength: 2.5, boxedAt: daysAgo(22), shelfPos: 'C 区 1 架', damagedSlots: [], operator: '高振华' },
+  // A 区 1 架（loc-a1：0~150m，容量 2）—— 已满
+  { id: 'box-001', boxNo: 'X-2402-01', holeId: 'hole-002', fromDepth: 0, toDepth: 25, slots: 10, slotLength: 2.5, boxedAt: daysAgo(40), shelfPos: 'A 区 1 架', damagedSlots: [], operator: '高振华', status: 'stored', locationId: 'loc-a1', inboundOrderId: 'inbound-001' },
+  { id: 'box-002', boxNo: 'X-2402-02', holeId: 'hole-002', fromDepth: 25, toDepth: 50, slots: 10, slotLength: 2.5, boxedAt: daysAgo(39), shelfPos: 'A 区 1 架', damagedSlots: [4], operator: '高振华', remark: '第 4 格岩芯破碎', status: 'stored', locationId: 'loc-a1', inboundOrderId: 'inbound-001' },
+  // A 区 2 架（loc-a2：0~200m，容量 4）—— 与下箱之间留一段 75~100m 断档
+  { id: 'box-003', boxNo: 'X-2402-03', holeId: 'hole-002', fromDepth: 50, toDepth: 75, slots: 10, slotLength: 2.5, boxedAt: daysAgo(38), shelfPos: 'A 区 2 架', damagedSlots: [], operator: '周明', status: 'stored', locationId: 'loc-a2', inboundOrderId: 'inbound-002' },
+  { id: 'box-008', boxNo: 'X-2402-05', holeId: 'hole-002', fromDepth: 100, toDepth: 125, slots: 10, slotLength: 2.5, boxedAt: daysAgo(35), shelfPos: 'A 区 2 架', damagedSlots: [], operator: '周明', status: 'stored', locationId: 'loc-a2', inboundOrderId: 'inbound-002' },
+  // B 区 1 架（loc-b1：0~400m，容量 4）
+  { id: 'box-004', boxNo: 'X-2403-01', holeId: 'hole-003', fromDepth: 0, toDepth: 30, slots: 12, slotLength: 2.5, boxedAt: daysAgo(52), shelfPos: 'B 区 1 架', damagedSlots: [], operator: '周明', status: 'stored', locationId: 'loc-b1', inboundOrderId: 'inbound-003' },
+  { id: 'box-005', boxNo: 'X-2403-02', holeId: 'hole-003', fromDepth: 30, toDepth: 60, slots: 12, slotLength: 2.5, boxedAt: daysAgo(51), shelfPos: 'B 区 1 架', damagedSlots: [7, 8], operator: '周明', remark: '断层破碎带，两格岩芯缺失', status: 'stored', locationId: 'loc-b1', inboundOrderId: 'inbound-003' },
+  // B 区 2 架（loc-b2：0~200m，容量 2）
+  { id: 'box-006', boxNo: 'X-2404-01', holeId: 'hole-004', fromDepth: 0, toDepth: 28, slots: 12, slotLength: 2.5, boxedAt: daysAgo(30), shelfPos: 'B 区 2 架', damagedSlots: [], operator: '赵晓峰', status: 'stored', locationId: 'loc-b2', inboundOrderId: 'inbound-004' },
+  // C 区 1 架（loc-c1：0~200m，容量 3）
+  { id: 'box-007', boxNo: 'X-2401-01', holeId: 'hole-001', fromDepth: 0, toDepth: 26, slots: 11, slotLength: 2.5, boxedAt: daysAgo(22), shelfPos: 'C 区 1 架', damagedSlots: [], operator: '高振华', status: 'stored', locationId: 'loc-c1', inboundOrderId: 'inbound-005' },
+
+  // 待入库箱：钻探班组可改可删
+  { id: 'box-101', boxNo: 'X-2402-06', holeId: 'hole-002', fromDepth: 125, toDepth: 150, slots: 10, slotLength: 2.5, boxedAt: daysAgo(8), shelfPos: '', damagedSlots: [], operator: '高振华', status: 'pending', locationId: '', inboundOrderId: '' },
+  { id: 'box-102', boxNo: 'X-2405-01', holeId: 'hole-005', fromDepth: 0, toDepth: 25, slots: 10, slotLength: 2.5, boxedAt: daysAgo(4), shelfPos: '', damagedSlots: [], operator: '周明', status: 'pending', locationId: '', inboundOrderId: '' },
+  { id: 'box-103', boxNo: 'X-2401-02', holeId: 'hole-001', fromDepth: 26, toDepth: 52, slots: 11, slotLength: 2.5, boxedAt: daysAgo(2), shelfPos: '', damagedSlots: [], operator: '高振华', status: 'pending', locationId: '', inboundOrderId: '' },
+
+  // 已报待上架：loc-a1 已满，这箱排队等腾位（重试仍提示排队，退回箱-001/002 后可再试）
+  { id: 'box-104', boxNo: 'X-2402-07', holeId: 'hole-002', fromDepth: 150, toDepth: 175, slots: 10, slotLength: 2.5, boxedAt: daysAgo(1), shelfPos: '', damagedSlots: [], operator: '高振华', status: 'submitted', locationId: '', inboundOrderId: 'inbound-101' },
+
+  // 确认失败退回待入库：B1-01 目前只管到 60m；管理员加深止深后在该单上重试即可上架
+  { id: 'box-105', boxNo: 'X-2403-03', holeId: 'hole-003', fromDepth: 60, toDepth: 90, slots: 12, slotLength: 2.5, boxedAt: daysAgo(1), shelfPos: '', damagedSlots: [], operator: '周明', status: 'pending', locationId: '', inboundOrderId: 'inbound-102' },
 ];
+
+/** 库位：写明每个位装几箱、管到哪段 */
+export const SEED_LOCATIONS: StorageLocation[] = [
+  { id: 'loc-a1', code: 'A1-01', shelfPos: 'A 区 1 架', holeId: '', capacity: 2, fromDepth: 0, toDepth: 200, createdAt: daysAgo(60), keeper: '马国仓', remark: '已满，新箱排队等腾位' },
+  { id: 'loc-a2', code: 'A2-01', shelfPos: 'A 区 2 架', holeId: '', capacity: 4, fromDepth: 0, toDepth: 200, createdAt: daysAgo(60), keeper: '马国仓' },
+  { id: 'loc-b1', code: 'B1-01', shelfPos: 'B 区 1 架', holeId: '', capacity: 4, fromDepth: 0, toDepth: 60, createdAt: daysAgo(60), keeper: '马国仓', remark: '管段暂编到 60m；加深止深后可重试失败单' },
+  { id: 'loc-b2', code: 'B2-01', shelfPos: 'B 区 2 架', holeId: '', capacity: 2, fromDepth: 0, toDepth: 200, createdAt: daysAgo(60), keeper: '马国仓' },
+  { id: 'loc-c1', code: 'C1-01', shelfPos: 'C 区 1 架', holeId: '', capacity: 3, fromDepth: 0, toDepth: 200, createdAt: daysAgo(60), keeper: '马国仓' },
+];
+
+/** 入库申请单 / 入库单：已上架单、排队单、确认失败退回单各一 */
+export const SEED_INBOUND_ORDERS: InboundOrder[] = [
+  {
+    id: 'inbound-001',
+    orderNo: 'RK-2401-001',
+    locationId: 'loc-a1',
+    applicant: '高振华',
+    keeper: '马国仓',
+    submittedAt: daysAgo(40),
+    confirmedAt: daysAgo(40),
+    status: 'stored',
+    items: [
+      { boxId: 'box-001', boxNo: 'X-2402-01', holeId: 'hole-002', fromDepth: 0, toDepth: 25 },
+      { boxId: 'box-002', boxNo: 'X-2402-02', holeId: 'hole-002', fromDepth: 25, toDepth: 50 },
+    ],
+    gaps: [],
+  },
+  {
+    id: 'inbound-002',
+    orderNo: 'RK-2401-002',
+    locationId: 'loc-a2',
+    applicant: '周明',
+    keeper: '马国仓',
+    submittedAt: daysAgo(38),
+    confirmedAt: daysAgo(38),
+    status: 'stored',
+    items: [
+      { boxId: 'box-003', boxNo: 'X-2402-03', holeId: 'hole-002', fromDepth: 50, toDepth: 75 },
+      { boxId: 'box-008', boxNo: 'X-2402-05', holeId: 'hole-002', fromDepth: 100, toDepth: 125 },
+    ],
+    gaps: [{ from: 75, to: 100, runLabel: '缺该段箱，对应回次 2402-16、2402-17、2402-18、2402-19、2402-20' }],
+  },
+  {
+    id: 'inbound-003',
+    orderNo: 'RK-2401-003',
+    locationId: 'loc-b1',
+    applicant: '周明',
+    keeper: '马国仓',
+    submittedAt: daysAgo(52),
+    confirmedAt: daysAgo(52),
+    status: 'stored',
+    items: [
+      { boxId: 'box-004', boxNo: 'X-2403-01', holeId: 'hole-003', fromDepth: 0, toDepth: 30 },
+      { boxId: 'box-005', boxNo: 'X-2403-02', holeId: 'hole-003', fromDepth: 30, toDepth: 60 },
+    ],
+    gaps: [],
+  },
+  {
+    id: 'inbound-004',
+    orderNo: 'RK-2401-004',
+    locationId: 'loc-b2',
+    applicant: '赵晓峰',
+    keeper: '马国仓',
+    submittedAt: daysAgo(30),
+    confirmedAt: daysAgo(30),
+    status: 'stored',
+    items: [{ boxId: 'box-006', boxNo: 'X-2404-01', holeId: 'hole-004', fromDepth: 0, toDepth: 28 }],
+    gaps: [],
+  },
+  {
+    id: 'inbound-005',
+    orderNo: 'RK-2401-005',
+    locationId: 'loc-c1',
+    applicant: '高振华',
+    keeper: '马国仓',
+    submittedAt: daysAgo(22),
+    confirmedAt: daysAgo(22),
+    status: 'stored',
+    items: [{ boxId: 'box-007', boxNo: 'X-2401-01', holeId: 'hole-001', fromDepth: 0, toDepth: 26 }],
+    gaps: [],
+  },
+  {
+    id: 'inbound-101',
+    orderNo: 'RK-2402-001',
+    locationId: 'loc-a1',
+    applicant: '高振华',
+    submittedAt: daysAgo(1),
+    status: 'submitted',
+    items: [{ boxId: 'box-104', boxNo: 'X-2402-07', holeId: 'hole-002', fromDepth: 150, toDepth: 175 }],
+    gaps: [],
+  },
+  {
+    id: 'inbound-102',
+    orderNo: 'RK-2402-002',
+    locationId: 'loc-b1',
+    applicant: '周明',
+    confirmedAt: daysAgo(1),
+    submittedAt: daysAgo(2),
+    status: 'failed',
+    failReason: '箱 X-2403-03 深度 60~90m 超出库位管段 0~60m，这批退回待入库；管理员把 B1-01 止深加大后可重试',
+    items: [{ boxId: 'box-105', boxNo: 'X-2403-03', holeId: 'hole-003', fromDepth: 60, toDepth: 90 }],
+    gaps: [],
+  },
+];
+
 
 export const SEED_LITHOS: LithoLog[] = [
   { id: 'litho-001', holeId: 'hole-002', fromDepth: 0, toDepth: 8, lithology: '第四系覆盖层', color: '黄褐色', alteration: '无', mineralization: '无', rqd: 0, sampleNo: '', logger: '陈立', remark: '残坡积层' },
@@ -180,10 +305,14 @@ export async function seedIfEmpty(): Promise<void> {
     db.lithos.count(),
   ]);
 
-  await db.transaction('rw', db.holes, db.runs, db.boxes, db.lithos, db.meta, async () => {
+  await db.transaction('rw', [db.holes, db.runs, db.boxes, db.lithos, db.locations, db.inboundOrders, db.meta], async () => {
     if (holeCount === 0) await db.holes.bulkPut(SEED_HOLES);
     if (runCount === 0) await db.runs.bulkPut(SEED_RUNS);
-    if (boxCount === 0) await db.boxes.bulkPut(SEED_BOXES);
+    if (boxCount === 0) {
+      await db.locations.bulkPut(SEED_LOCATIONS);
+      await db.inboundOrders.bulkPut(SEED_INBOUND_ORDERS);
+      await db.boxes.bulkPut(SEED_BOXES);
+    }
     if (lithoCount === 0) await db.lithos.bulkPut(SEED_LITHOS);
     await db.meta.put({ key: 'seeded', value: new Date().toISOString() });
   });
